@@ -82,6 +82,7 @@ module Fluent
                            :user => @user,
                            :password => @password,
                            :dbname => @dbname,
+                           :application_name => 'pg-logical',
                            :replication => "database"
                          )
       rescue Exception => e

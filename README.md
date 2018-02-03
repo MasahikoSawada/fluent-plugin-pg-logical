@@ -81,8 +81,20 @@ You will get,
 2018-02-03 16:02:38.266394490 +0900 : "{\"change\":[{\"kind\":\"insert\",\"schema\":\"public\",\"table\":\"hoge\",\"columnnames\":[\"c\"],\"columntypes\":[\"integer\"],\"columnvalues\":[1]},{\"kind\":\"insert\",\"schema\":\"public\",\"table\":\"hoge\",\"columnnames\":[\"c\"],\"columntypes\":[\"integer\"],\"columnvalues\":[2]},{\"kind\":\"insert\",\"schema\":\"public\",\"table\":\"hoge\",\"columnnames\":[\"c\"],\"columntypes\":[\"integer\"],\"columnvalues\":[3]}]}"
 2018-02-03 16:03:05.890485185 +0900 : "{\"change\":[{\"kind\":\"update\",\"schema\":\"public\",\"table\":\"hoge\",\"columnnames\":[\"c\"],\"columntypes\":[\"integer\"],\"columnvalues\":[11],\"oldkeys\":{\"keynames\":[\"c\"],\"keytypes\":[\"integer\"],\"keyvalues\":[1]}},{\"kind\":\"update\",\"schema\":\"public\",\"table\":\"hoge\",\"columnnames\":[\"c\"],\"columntypes\":[\"integer\"],\"columnvalues\":[22],\"oldkeys\":{\"keynames\":[\"c\"],\"keytypes\":[\"integer\"],\"keyvalues\":[2]}}]}"
 ```
-
 Because current (at least up to version 10) PostgreSQL doesn't support DDL replication, `CREATE TABLE` command doesn't appear to fluentd input.
+
+
+You can also monitor the activity of fluent-plugin-pg-logical on upstream server.
+
+```sql
+=# SELECT usename, application_name, sent_location, write_location, flush_location FROM pg_stat_replication ;
+
+ usename  | application_name | sent_location | write_location | flush_location 
+----------+------------------+---------------+----------------+----------------
+ masahiko | pg-logical       | 0/15ADD70     | 0/15ADAC8      | 0/15ADAC8
+(1 row)
+
+```
 
 ## Copyright
 
