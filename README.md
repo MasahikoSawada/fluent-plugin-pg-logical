@@ -1,29 +1,10 @@
-# fluent-plugin-mysql-replicator [![Build Status](https://travis-ci.org/y-ken/fluent-plugin-mysql-replicator.png?branch=master)](https://travis-ci.org/y-ken/fluent-plugin-mysql-replicator)
+# fluent-plugin-pg-logical
 
 ## Overview
 
-Fluentd input plugin to track insert/update/delete event from MySQL database server.  
-Not only that, it could multiple table replication into single or multi Elasticsearch/Solr.  
-It's comming support replicate to another RDB/noSQL.
+Fluentd input plugin to track of logical change set (insert/update/delete) event from PostgreSQL using logical decoding.
 
-## Requirements
-
-| fluent-plugin-mysql-replicator | fluentd    | ruby   |
-|--------------------|------------|--------|
-|  0.6.1            | v0.14.x | >= 2.1 |
-|  0.6.1            | v0.12.x | >= 1.9 |
-
-## Dependency
-
-before use, install dependent library as:
-
-```bash
-# for RHEL/CentOS
-$ sudo yum group install "Development Tools"
-
-# for Ubuntu/Debian
-$ sudo apt-get install build-essential
-```
+This plugin works as a WAL receiver of PostgreSQL and requires installation of logical decoding plugin to upstream PostgreSQL server.
 
 ## Installation
 
@@ -31,106 +12,81 @@ install with gem or fluent-gem command as:
 
 `````
 # for system installed fluentd
-$ gem install fluent-plugin-mysql-replicator -v 0.6.1
-
-# for td-agent2
-$ sudo td-agent-gem install fluent-plugin-mysql-replicator -v 0.6.1
+$ gem install fluent-plugin-pg-logical
 `````
 
-## Included plugins
+## Configuration
 
-* Input Plugin: mysql_replicator
-* Input Plugin: mysql_replicator_multi
-* Output Plugin: mysql_replicator_elasticsearch
-* Output Plugin: mysql_replicator_solr (experimental)
+|Parameter|Type|Default|Remarks|
+|:--------|:---|:------|:----------|
+|host|string|'localhost'|-|
+|port|integer|5432|-|
+|user|string|'postgres'|-|
+|password|string|nil|-|
+|dbname|string|'postgres'|-|
+|slotanme|string|nil|Required|
+|plugin|string|nil|Required|
+|status_interval|integer|10|Specifies the minimum frequency to send information about replication progress to upstream server|
+|tag|string|nil|-|
+|create_slot|bool|false|Specify to create the specified replication slot before start|
+|if_not_exists|bool|false|Do not error if slot already exists when creating a slot|
 
-## Output example
+## Restriction
+* Because logical decoding support only data changes (i.g. INSERT/UPDATE/DELETE), other changes such as DDL, sequence doesn't appear on fluentd input
+* Replication slots are reuiqred as much as you connect with fluent-plugin-pg-logical
 
-It is a example when detecting insert/update/delete events.
+## Example with wal2json
+fluent-plugin-pg-logical requires a logical decoding plugin to get logical change set.This is a example of use of fluent-plugin-pg-logical with [wal2json](https://github.com/eulerto/wal2json), which decodes WAL to json object.
 
-### sample query
+1. Install wal2json to PostgreSQL
+Please refer to "Build and Install" section in wal2json documentation.
 
-`````
-$ mysql -e "create database myweb"
-$ mysql myweb -e "create table search_test(id int auto_increment, text text, PRIMARY KEY (id))"
-$ sleep 10
-$ mysql myweb -e "insert into search_test(text) values('aaa')"
-$ sleep 10
-$ mysql myweb -e "update search_test set text='bbb' where text = 'aaa'"
-$ sleep 10
-$ mysql myweb -e "delete from search_test where text='bbb'"
-`````
+2. Setting Configuration Parameters
+```
+<source>
+  @type pg_logical
+  host pgserver
+  port 5432
+  user postgres
+  dbname replication_db
+  slotname wal2json_slot
+  create_slot true
+  if_not_exists true
+</source>
+```
 
-### result
+3. Run fluentd
+Launch fluentd.
 
-`````
-$ tail -f /var/log/td-agent/td-agent.log
-2013-11-25 18:22:25 +0900 replicator.myweb.search_test.insert.id: {"id":"1","text":"aaa"}
-2013-11-25 18:22:35 +0900 replicator.myweb.search_test.update.id: {"id":"1","text":"bbb"}
-2013-11-25 18:22:45 +0900 replicator.myweb.search_test.delete.id: {"id":"1"}
-`````
+4. Issue some SQL
+```sql
+=# CREATE TABLE hoge (c int primary key);
+CREATE TABLE
+=#INSERT INTO hoge VALUES (1), (2), (3);
+INSERT 0 3
+=# BEGIN;
+BEGIN
+=# UPDATE hoge SET c = c + 10 WHERE c = 1;
+UPDATE 1
+=# UPDATE hoge SET c = c + 20 WHERE c = 2;
+UPDATE 1
+=# COMMIT;
+COMMIT
+```
 
-## Tutorial
+You will get,
 
-### mysql_replicator
+```
+2018-02-03 16:02:20.073058428 +0900 : "{\"change\":[]}"
+2018-02-03 16:02:38.266394490 +0900 : "{\"change\":[{\"kind\":\"insert\",\"schema\":\"public\",\"table\":\"hoge\",\"columnnames\":[\"c\"],\"columntypes\":[\"integer\"],\"columnvalues\":[1]},{\"kind\":\"insert\",\"schema\":\"public\",\"table\":\"hoge\",\"columnnames\":[\"c\"],\"columntypes\":[\"integer\"],\"columnvalues\":[2]},{\"kind\":\"insert\",\"schema\":\"public\",\"table\":\"hoge\",\"columnnames\":[\"c\"],\"columntypes\":[\"integer\"],\"columnvalues\":[3]}]}"
+2018-02-03 16:03:05.890485185 +0900 : "{\"change\":[{\"kind\":\"update\",\"schema\":\"public\",\"table\":\"hoge\",\"columnnames\":[\"c\"],\"columntypes\":[\"integer\"],\"columnvalues\":[11],\"oldkeys\":{\"keynames\":[\"c\"],\"keytypes\":[\"integer\"],\"keyvalues\":[1]}},{\"kind\":\"update\",\"schema\":\"public\",\"table\":\"hoge\",\"columnnames\":[\"c\"],\"columntypes\":[\"integer\"],\"columnvalues\":[22],\"oldkeys\":{\"keynames\":[\"c\"],\"keytypes\":[\"integer\"],\"keyvalues\":[2]}}]}"
+```
 
-It is easy to try it on this plugin quickly.  
-For more detail are described at [Tutorial-mysql_replicator.md](https://github.com/y-ken/fluent-plugin-mysql-replicator/blob/master/Tutorial-mysql_replicator.md)
-
-**Features**
-
-* Table (or view table) synchronization supported.
-* Replicate small record under a millons table.
-* It is recommend to use insert only table.
-* Nested documents are supported with placeholder which accessing to temporary table created at the each loop.
-
-**Examples**
-
-* [mysql_single_table_to_elasticsearch.md](https://github.com/y-ken/fluent-plugin-mysql-replicator/blob/master/example/mysql_single_table_to_elasticsearch.md)
-* [mysql_single_table_to_solr.md](https://github.com/y-ken/fluent-plugin-mysql-replicator/blob/master/example/mysql_single_table_to_solr.md)
-
-### mysql_replicator_multi
-
-It replicates a millions of records and/or multiple tables with multiple threads.  
-This architecture is storing hash table in MySQL management table instead of ruby internal memory.  
-See tutorial at [Tutorial-mysql_replicator_multi.md](https://github.com/y-ken/fluent-plugin-mysql-replicator/blob/master/Tutorial-mysql_replicator_multi.md)
-
-**Features**
-
-* table (or view table) synchronization supported.
-* Multiple table synchronization supported and its DSN stored in MySQL management table.
-* Using MySQL database as hash table cache to support replicate over a millions table.
-* It is recommend to make whole copy of tables.
-* Nested documents are supported with placeholder which accessing to temporary table created at the each loop.
-
-**Examples**
-
-* [mysql_multi_table_to_elasticsearch.md](https://github.com/y-ken/fluent-plugin-mysql-replicator/blob/master/example/mysql_multi_table_to_elasticsearch.md)
-* [mysql_multi_table_to_solr.md](https://github.com/y-ken/fluent-plugin-mysql-replicator/blob/master/example/mysql_multi_table_to_solr.md)
-
-## Articles
-
-* MySQLテーブルへの更新/削除イベントを逐次取得するFluentdプラグイン「fluent-plugin-mysql-replicator」をリリースしました - Y-Ken Studio<br />
-http://y-ken.hatenablog.com/entry/fluent-plugin-mysql-replicator-has-released
-
-* MySQLユーザ視点での小さく始めるElasticsearch<br />
-http://www.slideshare.net/y-ken/introducing-elasticsearch-for-mysql-users
-
-* MySQLからelasticsearchへ、レコードをネスト構造化しつつ同期出来る fluent-plugin-mysql-replicator v0.4.0 を公開しました - Y-Ken Studio<br />
-http://y-ken.hatenablog.com/entry/fluent-plugin-mysql-repicator-v0.4.0
-
-## TODO
-
-Pull requests are very welcome like below!!
-
-* more documents
-* more tests with mock.
-* support string type of primary_key.
-* support reload setting on demand.
+Because current (at least up to version 10) PostgreSQL doesn't support DDL replication, `CREATE TABLE` command doesn't appear to fluentd input.
 
 ## Copyright
 
-Copyright © 2013- Kentaro Yoshida ([@yoshi_ken](https://twitter.com/yoshi_ken))
+Copyright © 2018- Masahiko Sawada
 
 ## License
 
