@@ -2,7 +2,7 @@
 
 ## Overview
 
-Fluentd input plugin to track of logical change set (insert/update/delete) event from PostgreSQL using logical decoding.
+Fluentd input plugin to track of changes (insert/update/delete) event on PostgreSQL using logical decoding.
 
 This plugin works as a WAL receiver of PostgreSQL and requires installation of logical decoding plugin to upstream PostgreSQL server.
 
