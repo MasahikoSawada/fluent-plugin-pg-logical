@@ -32,9 +32,6 @@ module Fluent
       if (!@create_slot.nil? and @plugin.nil?)
         raise Fluent::ConfigError, "pg-logical: 'create_slot' parameter reuiqres to specify 'plugin' parameter."
       end
-      if @tag.nil?
-        raise Fluent::ConfigError, "pg-logical: missing 'tag' parameter. Please add following line into config"
-      end
 
       log.info ":host=>#{host} :dbname=>#{dbname} :port=>#{port} :user=>#{user} :tag=>#{tag} :slotname=>#{slotname} :plugin=>#{plugin} :status_interval=>#{status_interval}"
     end
@@ -44,6 +41,11 @@ module Fluent
     end
 
     def shutdown
+      if (!@conn.nil?)
+        @conn.put_copy_end()
+        @conn.flush()
+      end
+
       Thread.kill(@thread)
     end
 
@@ -91,69 +93,77 @@ module Fluent
 
     # Main routine of pg-logical plugin. Stream logical WAL.
     def streamLogicalLog
-      @conn = get_connection()
+      begin
+        @conn = get_connection()
 
-      # Create replication slot if required
-      create_replication_slot()
+        # Create replication slot if required
+        create_replication_slot()
 
-      # Start replication
-      start_streaming()
+        # Start replication
+        start_streaming()
 
-      record = nil
-      socket = @conn.socket_io
-      time_to_abort = false
-      last_status = Time.now
-      loop do
+        record = nil
+        socket = @conn.socket_io
+        time_to_abort = false
+        last_status = Time.now
+        loop do
         
-        # Get current timestamp
-        now = Time.now
+          # Get current timestamp
+          now = Time.now
 
-        # Send feedback if necessary
-        last_status = sendFeedback(now, last_status, false)
+          # Send feedback if necessary
+          last_status = sendFeedback(now, last_status, false)
 
-        # Get a decoded WAL decode
-        record = @conn.get_copy_data(true)
+          # Get a decoded WAL decode
+          record = @conn.get_copy_data(true)
 
-        # In async mode, and no data available. We block on reading but
-        # not more than the specified timeout, so that we can send a
-        # response back to the client.# In asynchronou mode,
-        if (record == false)
-          # XXX: maybe better to use libev?
-          r = select([socket], [], [], 10.0)
+          # In async mode, and no data available. We block on reading but
+          # not more than the specified timeout, so that we can send a
+          # response back to the client.# In asynchronou mode,
+          if (record == false)
+            # XXX: maybe better to use libev?
+            r = select([socket], [], [], 10.0)
 
-          if (r.nil?)
-            # Got a timeout or signal. Continue the loop and either
-            # deliver a status packet to the server or just go back into
-            # blocking.
+            if (r.nil?)
+              # Got a timeout or signal. Continue the loop and either
+              # deliver a status packet to the server or just go back into
+              # blocking.
+              next
+            end
+
+            # There is actual data on socket, consume it.
+            @conn.consume_input()
             next
           end
 
-          # There is actual data on socket, consume it.
-          @conn.consume_input()
-          next
-        end
+          # record is nil means that copy is done.
+          if (record.nil?)
+            next
+          end
 
-        # record is nil means that copy is done.
-        if (record.nil?)
-          next
-        end
+          # Process a record, get extracted record
+          wal = extractRecord(record)
 
-        # Process a record, get extracted record
-        wal = extractRecord(record)
+          if (wal[:type] == 'w')	# WAL data
+            #log.info "[GET w] start : #{wal[:start_lsn]}, end : #{wal[:end_lsn]}, time : #{wal[:send_time]}, data : #{wal[:data]}"
+            last_status = sendFeedback(now, last_status, true)
 
-        if (wal[:type] == 'w')	# WAL data
-          #log.info "[GET w] start : #{wal[:start_lsn]}, end : #{wal[:end_lsn]}, time : #{wal[:send_time]}, data : #{wal[:data]}"
-          last_status = sendFeedback(now, last_status, true)
+            @router.emit(@tag, Fluent::Engine.now, wal[:data])
 
-          @router.emit(@tag, Fluent::Engine.now, wal[:data])
+          elsif (wal[:type] == 'k') # Keepalive data
+            #log.info "[GET k] end : #{wal[:end_lsn]}, time : #{wal[:send_time]}, reply_required : #{wal[:reply_required]}"
 
-        elsif (wal[:type] == 'k') # Keepalive data
-          #log.info "[GET k] end : #{wal[:end_lsn]}, time : #{wal[:send_time]}, reply_required : #{wal[:reply_required]}"
-
-          if (wal[:reply_required] == 1)
+            if (wal[:reply_required] == 1)
               last_status = sendFeedback(now, last_status, true)
+            end
           end
         end
+      rescue Exception => e
+        log.warn "pg-logical: #{e}"
+        sleep 5
+        retry
+      ensure
+        @conn.finish if !@conn.nil?
       end
     end
 
@@ -235,7 +245,7 @@ module Fluent
       # Report current status to upstream server
       if (!@recv_lsn.nil?)
         # -- Feedback format ------
-        # 1. 'r'		: byte
+        # 1. 'r'	: byte
         # 2. write_lsn	: uint64
         # 3. flush_lsn	: uint64
         # 3. apply_lsn	: uint64
