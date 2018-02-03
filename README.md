@@ -96,6 +96,10 @@ You can also monitor the activity of fluent-plugin-pg-logical on upstream server
 
 ```
 
+## TODO
+* Add travis test
+* Table filtering
+
 ## Copyright
 
 Copyright © 2018- Masahiko Sawada
