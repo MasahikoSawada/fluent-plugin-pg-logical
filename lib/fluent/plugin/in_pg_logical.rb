@@ -2,6 +2,7 @@ require 'fluent/input'
 
 module Fluent
   class PgLogicalInput < Fluent::Input
+    # Register input plugin
     Plugin.register_input( 'pg_logical', self)
 
     def initialize
@@ -23,7 +24,7 @@ module Fluent
     def configure(conf)
       super
 
-      # 'slot_name' parameter is mandantory.
+      # 'slot_name' parameter is required.
       if (@slotname.nil?)
         raise Fluent::ConfigError, "pg-logical: missing 'slotname' parameter."
       end
@@ -68,7 +69,7 @@ module Fluent
       xlogpos = res.getvalue(0, 2)
       dbname = res.getvalue(0, 3)
 
-      # Start logical replication      
+      # Start logical replication
       strbuf = "START_REPLICATION SLOT %s LOGICAL %s" % [@slotname, xlogpos]
       @conn.exec(strbuf)
     end
@@ -108,7 +109,6 @@ module Fluent
         time_to_abort = false
         last_status = Time.now
         loop do
-        
           # Get current timestamp
           now = Time.now
 
@@ -231,7 +231,6 @@ module Fluent
 
       return wal
     end
-    
 
     # Return the last feedback time
     def sendFeedback(now, last_status, force)
