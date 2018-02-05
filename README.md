@@ -25,7 +25,7 @@ $ gem install fluent-plugin-pg-logical
 |password|string|nil|-|
 |dbname|string|'postgres'|-|
 |slotanme|string|nil|Required|
-|plugin|string|nil|Required|
+|plugin|string|nil|Required if 'create_slot' is specified|
 |status_interval|integer|10|Specifies the minimum frequency to send information about replication progress to upstream server|
 |tag|string|nil|-|
 |create_slot|bool|false|Specify to create the specified replication slot before start|
