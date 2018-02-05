@@ -50,6 +50,7 @@ Please refer to "Build and Install" section in wal2json documentation.
   user postgres
   dbname replication_db
   slotname wal2json_slot
+  plugin wal2json
   create_slot true
   if_not_exists true
 </source>
