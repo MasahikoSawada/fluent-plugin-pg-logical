@@ -295,7 +295,6 @@ module Fluent
     def create_replication_slot
       begin
         strbuf = "CREATE_REPLICATION_SLOT %s LOGICAL %s" % [@slotname, @plugin]
-        puts strbuf
         @conn.exec(strbuf)
       rescue PG::Error
         # If if_not_exists is set, ignore the error
