@@ -4,8 +4,8 @@ Gem::Specification.new do |s|
   s.version     = "0.0.1"
   s.authors     = ["Masahiko Sawada"]
   s.email       = ["sawada.mshk@gmail.com"]
-  s.homepage    = "https://github.com/"
-  s.summary     = %q{Fluentd input plugin}
+  s.homepage    = "https://github.com/MasahikoSawada/fluent-plugin-pg-logical"
+  s.summary     = %q{Fluentd input plugin to track of changes on PostgreSQL server using logical decoding}
   s.license     = "Apache-2.0"
 
   s.files         = `git ls-files`.split("\n")
