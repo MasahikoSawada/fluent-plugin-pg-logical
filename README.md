@@ -39,10 +39,13 @@ $ gem install fluent-plugin-pg-logical
 fluent-plugin-pg-logical requires a logical decoding plugin to get logical change set.This is a example of use of fluent-plugin-pg-logical with [wal2json](https://github.com/eulerto/wal2json), which decodes WAL to json object.
 
 1. Install wal2json to PostgreSQL
+
 Please refer to "Build and Install" section in wal2json documentation.
 
 2. Setting Configuration Parameters
 ```
+$ vi /path/to/fluent.conf
+# Configuration for fluent-plugin-pg-logical
 <source>
   @type pg_logical
   host pgserver
@@ -53,13 +56,18 @@ Please refer to "Build and Install" section in wal2json documentation.
   plugin wal2json
   create_slot true
   if_not_exists true
+  tag pglogical
 </source>
+
+# Configuration for test output
+<match pglogical>
+  @type stdout
+</match>
 ```
 
 3. Run fluentd
-Launch fluentd.
 
-4. Issue some SQL
+4. Issue some SQL on PostgreSQl
 ```sql
 =# CREATE TABLE hoge (c int primary key);
 CREATE TABLE
@@ -96,6 +104,11 @@ You can also monitor the activity of fluent-plugin-pg-logical on upstream server
 (1 row)
 
 ```
+
+## Tested platforms
+
+* PostgreSQL 10.X
+* fluentd 1.1.0
 
 ## TODO
 * Add travis test
